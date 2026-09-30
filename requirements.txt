@@ -1,0 +1,4 @@
+flask>=3.0
+google-api-python-client>=2.120
+google-auth-oauthlib>=1.2
+requests>=2.31

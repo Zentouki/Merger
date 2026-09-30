@@ -1,0 +1,15 @@
+# Secrets: never commit these
+client_secret.json
+accounts.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pooled Drive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef1f4;--ink:#14202b;--mute:#5b6a78;--line:#d5dbe1;--card:#fff;--acc:#2f6fed}
+@media(prefers-color-scheme:dark){:root{--bg:#10161c;--ink:#e7edf3;--mute:#8d9cab;--line:#27313b;--card:#171f27}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Schibsted Grotesk",system-ui,sans-serif}
+main{max-width:980px;margin:0 auto;padding:32px 20px 80px}
+h1{font-size:2.1rem;line-height:1.15;margin:0 0 4px;letter-spacing:-.02em}
+#sub{color:var(--mute);margin:0 0 16px;min-height:1.5em}
+#bar{display:flex;height:22px;border-radius:4px;overflow:hidden;background:var(--line)}
+#bar i{display:block;height:100%;border-right:2px solid var(--bg)}
+#accts{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:2px}
+#accts li{display:flex;align-items:center;gap:10px;padding:6px 0}
+#accts li span{flex:1;overflow:hidden;text-overflow:ellipsis}
+#accts em{color:var(--mute);font-style:normal;font-size:.9rem}
+#accts b,.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;flex:none}
+#accts b{margin:0}
+button,.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 12px;border-radius:6px;cursor:pointer;text-decoration:none;display:inline-block}
+button:hover,.btn:hover{border-color:var(--acc)}
+.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+#accts button,.act button{border:0;background:none;color:var(--mute);padding:2px 6px}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin:32px 0 12px;align-items:center}
+.tools input[type=search]{flex:1;min-width:160px;font:inherit;padding:7px 12px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink)}
+#crumbs{color:var(--mute);margin-bottom:8px}
+#crumbs a{color:var(--ink);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.tbl{background:var(--card);border:1px solid var(--line);border-radius:8px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:640px}
+th{text-align:left;font-weight:500;color:var(--mute);padding:10px 14px;border-bottom:1px solid var(--line)}
+td{padding:9px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+tr:last-child td{border:0}
+td.nm{white-space:normal;word-break:break-word}
+tr.dir{cursor:pointer}tr.dir td.nm{font-weight:700}tr.dir:hover{background:var(--bg)}
+.act{text-align:right}.act a{margin-right:6px;color:var(--acc)}
+.empty{color:var(--mute);text-align:center;padding:40px 14px}
+body.drag .tbl{outline:2px dashed var(--acc)}
+#toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:6px;opacity:0;pointer-events:none;transition:.2s}
+#toast.show{opacity:1;transform:translate(-50%,0)}#toast.bad{background:#c0392b;color:#fff}
+@media(prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <h1 id="headline">Loading…</h1>
+  <p id="sub"></p>
+  <div id="bar"></div>
+  <ul id="accts"></ul>
+  <div class="tools">
+    <a class="btn primary" href="/auth/add">Link a Google account</a>
+    <input type="search" id="q" placeholder="Search all accounts">
+    <button id="mk">New folder</button>
+    <label class="btn">Upload<input id="file" type="file" multiple hidden></label>
+  </div>
+  <div id="crumbs"></div>
+  <div class="tbl"><table>
+    <thead><tr><th>Name</th><th>Account</th><th>Size</th><th>Modified</th><th></th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+</main>
+<div id="toast" role="status"></div>
+<script>
+const $=s=>document.querySelector(s),COL=['#2f6fed','#e08a1e','#1e9e78','#b23a8c','#6b7a8c','#d04a3a'];
+let accts=[],path=[],query='';
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=n=>{if(n==null||n==='')return'';const u=['B','KB','MB','GB','TB'];let i=0;n=+n;while(n>=1024&&i<4){n/=1024;i++}return n.toFixed(i?1:0)+' '+u[i]};
+const color=e=>COL[Math.max(0,accts.findIndex(a=>a.email===e))%COL.length];
+async function api(u,o){const r=await fetch(u,o);if(!r.ok){let m;try{m=(await r.json()).error}catch{}throw new Error(m||r.statusText)}return r.status===204?null:r.json()}
+function say(m,bad){const t=$('#toast');t.textContent=m;t.className=bad?'bad show':'show';clearTimeout(say.t);say.t=setTimeout(()=>t.className='',4000)}
+
+async function loadAccounts(){
+  accts=await api('/api/accounts');
+  const ok=accts.filter(a=>!a.error),unl=ok.some(a=>a.limit==null);
+  const used=ok.reduce((s,a)=>s+a.used,0),lim=ok.reduce((s,a)=>s+(a.limit||0),0),den=unl?used||1:lim||1;
+  $('#headline').textContent=!accts.length?'Link your first Google account':unl?`${fmt(used)} used across ${accts.length} accounts`:`${fmt(lim-used)} free across ${accts.length} account${accts.length>1?'s':''}`;
+  $('#sub').textContent=accts.length&&!unl?`${fmt(used)} of ${fmt(lim)} used`:(accts.length?'':'Each account you add joins one shared pool.');
+  $('#bar').innerHTML=ok.map(a=>`<i style="width:${a.used/den*100}%;background:${color(a.email)}" title="${esc(a.email)}"></i>`).join('');
+  $('#accts').innerHTML=accts.map(a=>`<li><b style="background:${color(a.email)}"></b><span>${esc(a.email)}</span><em>${a.error?'needs re-linking':fmt(a.used)+(a.limit?' of '+fmt(a.limit):'')}</em><button data-rm="${esc(a.email)}">Unlink</button></li>`).join('');
+}
+
+async function loadFiles(){
+  const cur=path[path.length-1],p=new URLSearchParams();
+  if(query)p.set('q',query);else if(cur){p.set('account',cur.acct);p.set('folder',cur.id)}
+  const rows=accts.length?await api('/api/files?'+p):[];
+  $('#crumbs').innerHTML=query?`Results for “${esc(query)}” <button id="clr">Clear search</button>`:['<a data-i="-1">All accounts</a>',...path.map((x,i)=>`<a data-i="${i}">${esc(x.name)}</a>`)].join(' / ');
+  $('#rows').innerHTML=rows.length?rows.map(f=>{
+    const d=f.mimeType==='application/vnd.google-apps.folder';
+    return`<tr${d?` class="dir" data-open="${f.id}" data-acct="${esc(f.account)}" data-name="${esc(f.name)}"`:''}><td class="nm">${esc(f.name)}${d?'/':''}</td><td><span class="dot" style="background:${color(f.account)}"></span>${esc(f.account)}</td><td>${d?'':fmt(f.size)}</td><td>${f.modifiedTime.slice(0,10)}</td><td class="act">${d?'':`<a href="/api/download?account=${encodeURIComponent(f.account)}&id=${f.id}">Download</a>`}<button data-del="${f.id}" data-acct="${esc(f.account)}">Delete</button></td></tr>`}).join('')
+    :`<tr><td colspan="5" class="empty">${accts.length?'Nothing here. Drop files anywhere on this page to upload.':'Link a Google account to see your files.'}</td></tr>`;
+}
+const refresh=async()=>{try{await loadAccounts();await loadFiles()}catch(e){say(e.message,1)}};
+
+async function up(list){
+  const cur=path[path.length-1];
+  for(const f of list){
+    say(`Uploading ${f.name}…`);
+    const fd=new FormData();fd.append('file',f);
+    if(cur){fd.append('account',cur.acct);fd.append('folder',cur.id)}
+    try{const r=await api('/api/upload',{method:'POST',body:fd});say(`${f.name} uploaded to ${r.account}`)}
+    catch(e){say(`${f.name}: ${e.message}`,1)}
+  }
+  refresh();
+}
+
+document.addEventListener('click',async e=>{
+  const t=e.target,row=t.closest('tr.dir');
+  if(t.dataset.rm){if(confirm(`Unlink ${t.dataset.rm}? Its files stay in Google Drive.`)){await api('/api/accounts/'+encodeURIComponent(t.dataset.rm),{method:'DELETE'});path=[];refresh()}}
+  else if(t.dataset.del){if(confirm('Move this file to the trash in its Drive account?')){await api(`/api/files?account=${encodeURIComponent(t.dataset.acct)}&id=${t.dataset.del}`,{method:'DELETE'}).catch(e=>say(e.message,1));refresh()}}
+  else if(t.dataset.i!==undefined&&t.tagName==='A'){path=path.slice(0,+t.dataset.i+1);loadFiles()}
+  else if(t.id==='clr'){query='';$('#q').value='';loadFiles()}
+  else if(row){path.push({id:row.dataset.open,acct:row.dataset.acct,name:row.dataset.name});query='';$('#q').value='';loadFiles()}
+});
+$('#q').addEventListener('input',()=>{clearTimeout($('#q').t);$('#q').t=setTimeout(()=>{query=$('#q').value.trim();loadFiles().catch(e=>say(e.message,1))},350)});
+$('#file').addEventListener('change',e=>{up([...e.target.files]);e.target.value=''});
+$('#mk').addEventListener('click',async()=>{
+  const name=prompt('Folder name');if(!name)return;const cur=path[path.length-1];
+  try{await api('/api/folder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,account:cur?.acct,folder:cur?.id})});loadFiles()}catch(e){say(e.message,1)}
+});
+['dragenter','dragover'].forEach(n=>addEventListener(n,e=>{e.preventDefault();document.body.classList.add('drag')}));
+['dragleave','drop'].forEach(n=>addEventListener(n,e=>{e.preventDefault();document.body.classList.remove('drag')}));
+addEventListener('drop',e=>{if(e.dataTransfer.files.length)up([...e.dataTransfer.files])});
+refresh();
+</script>
+</body>
+</html>
