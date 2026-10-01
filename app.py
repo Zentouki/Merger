@@ -1,4 +1,4 @@
-"""Pooled Drive: link several Google Drive accounts and use them as one storage.
+"""Merger: link several Google Drive accounts and use them as one storage.
 Run locally: python app.py  ->  http://localhost:5000
 """
 import json, os, re, secrets, time
@@ -8,6 +8,7 @@ from urllib.parse import quote
 
 from flask import (Flask, Response, jsonify, redirect, request, send_from_directory,
                    session, stream_with_context)
+from werkzeug.security import check_password_hash, generate_password_hash
 from google.auth.transport.requests import AuthorizedSession, Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -31,7 +32,11 @@ def log(action, acct, name=""):
                             "account": acct, "name": name}) + "\n")
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(16)
+KEYFILE = BASE / "secret.key"          # keeps you signed in across restarts
+if not KEYFILE.exists():
+    KEYFILE.write_text(secrets.token_hex(32))
+app.secret_key = KEYFILE.read_text()
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
 
 
 # ---------- account + credential helpers ----------
@@ -73,6 +78,57 @@ def best(size=0):
     """Account with the most free space that can still fit `size` bytes."""
     ok = [q for q in map(quota, load()) if "error" not in q and free(q) >= size]
     return max(ok, key=free)["email"] if ok else None
+
+
+# ---------- Merger login ----------
+AUTH = BASE / "auth.json"               # admin email + password hash (keep private)
+LOCK = {"fails": 0, "until": 0.0}
+
+
+@app.before_request
+def guard():
+    if request.endpoint in ("login", "logout", "static") or session.get("user"):
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify(error="Please sign in."), 401
+    return redirect("/login")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    auth = json.loads(AUTH.read_text()) if AUTH.exists() else None
+    if request.method == "GET":
+        page = (BASE / "login.html").read_text(encoding="utf-8")
+        return Response(page.replace("__MODE__", "signin" if auth else "setup"), mimetype="text/html")
+    j = request.get_json(force=True)
+    email, pw = j.get("email", "").strip().lower(), j.get("password", "")
+    if not auth:  # first run: create the one admin login
+        if "@" not in email or len(pw) < 8:
+            return jsonify(error="Enter a valid email and a password of at least 8 characters."), 400
+        if pw != j.get("confirm"):
+            return jsonify(error="Passwords don't match."), 400
+        AUTH.write_text(json.dumps({"email": email, "hash": generate_password_hash(pw)}))
+    else:
+        if time.time() < LOCK["until"]:
+            return jsonify(error="Too many attempts. Try again in a minute."), 429
+        if email != auth["email"] or not check_password_hash(auth["hash"], pw):
+            LOCK["fails"] += 1
+            if LOCK["fails"] >= 5:
+                LOCK.update(fails=0, until=time.time() + 60)
+            log("failed sign-in", email)
+            return jsonify(error="Incorrect email or password."), 401
+        LOCK["fails"] = 0
+    session.clear()
+    session["user"] = email
+    session.permanent = bool(j.get("remember"))
+    log("signed in", email)
+    return jsonify(ok=True)
+
+
+@app.post("/logout")
+def logout():
+    session.clear()
+    return "", 204
 
 
 # ---------- OAuth: link another account ----------

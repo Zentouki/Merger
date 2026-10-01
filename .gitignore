@@ -16,3 +16,7 @@ Thumbs.db
 
 # Activity log (contains file names)
 history.jsonl
+
+# Login data
+auth.json
+secret.key

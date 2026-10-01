@@ -1,4 +1,4 @@
-# Pooled Drive
+# Merger
 
 Link several Google Drive accounts and use them as one storage pool.
 
@@ -29,3 +29,9 @@ Open http://localhost:5000 and click **Link a Google account** once per account.
 - While the consent screen is in **Testing**, Google expires refresh tokens after 7 days; accounts then show "needs re-linking". Publishing the app (it can stay unverified for personal use) removes that limit.
 - Each file lives whole in one account. Files larger than any single account's free space can't be stored, and splitting files across accounts isn't implemented.
 - The server binds to `127.0.0.1` and has no login of its own. Don't expose it to a network without adding authentication.
+
+## Login
+
+The first time you open Merger it asks you to create an email and password. After that you sign in with them. Your sign-ins and failed attempts appear in **Activity**.
+
+Forgot the password? Stop the app, delete `auth.json`, and start it again to set a new one. `auth.json` and `secret.key` are created next to `app.py`; keep them private.
