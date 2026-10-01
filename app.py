@@ -1,7 +1,8 @@
 """Pooled Drive: link several Google Drive accounts and use them as one storage.
 Run locally: python app.py  ->  http://localhost:5000
 """
-import json, os, secrets
+import json, os, re, secrets, time
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import quote
 
@@ -20,6 +21,14 @@ SECRETS = BASE / "client_secret.json"   # OAuth client downloaded from Google Cl
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 REDIRECT = "http://localhost:5000/oauth2callback"
 FOLDER = "application/vnd.google-apps.folder"
+HISTORY = BASE / "history.jsonl"        # activity log of everything done through this app
+THUMBS = {}                             # (account, file id) -> Drive thumbnail URL
+
+
+def log(action, acct, name=""):
+    with HISTORY.open("a") as h:
+        h.write(json.dumps({"t": time.strftime("%Y-%m-%d %H:%M:%S"), "action": action,
+                            "account": acct, "name": name}) + "\n")
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(16)
@@ -117,12 +126,18 @@ def files():
         cond = f"trashed=false and name contains '{safe}'"
     else:
         cond = f"trashed=false and '{folder}' in parents"
+    if acct and not q:
+        log("opened folder", acct, request.args.get("name", folder))
     out = []
     for email in [acct] if acct else load():  # merge every account into one listing
         try:
             res = drive(email).files().list(q=cond, pageSize=200,
-                                            fields="files(id,name,mimeType,size,modifiedTime)").execute()
-            out += [{**f, "account": email} for f in res["files"]]
+                                            fields="files(id,name,mimeType,size,modifiedTime,thumbnailLink,webViewLink)").execute()
+            for f in res["files"]:
+                if f.get("thumbnailLink"):
+                    THUMBS[(email, f["id"])] = f.pop("thumbnailLink")
+                    f["thumb"] = True
+                out.append({**f, "account": email})
         except Exception:
             pass  # a broken account shows up as "needs re-link" in /api/accounts
     out.sort(key=lambda f: (f["mimeType"] != FOLDER, f["name"].lower()))
@@ -142,6 +157,7 @@ def upload():
                               chunksize=8 * 1024 * 1024, resumable=True)
     body = {"name": f.filename, "parents": [request.form.get("folder") or "root"]}
     r = drive(acct).files().create(body=body, media_body=media, fields="id").execute()
+    log("uploaded", acct, f.filename)
     return jsonify(account=acct, id=r["id"])
 
 
@@ -149,6 +165,7 @@ def upload():
 def download():
     acct, fid = request.args["account"], request.args["id"]
     meta = drive(acct).files().get(fileId=fid, fields="name,mimeType").execute()
+    log("downloaded", acct, meta["name"])
     base = f"https://www.googleapis.com/drive/v3/files/{fid}"
     if meta["mimeType"].startswith("application/vnd.google-apps"):  # Docs/Sheets -> PDF
         url, name, mime = base + "/export?mimeType=application/pdf", meta["name"] + ".pdf", "application/pdf"
@@ -159,18 +176,73 @@ def download():
                     headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}"})
 
 
-@app.post("/api/folder")
-def mkdir():
+NEW = {"folder": FOLDER, "doc": "application/vnd.google-apps.document",
+       "sheet": "application/vnd.google-apps.spreadsheet",
+       "slide": "application/vnd.google-apps.presentation", "text": "text/plain"}
+
+
+@app.post("/api/new")
+def new():
     j = request.json
     acct = j.get("account") or best()
-    body = {"name": j["name"], "mimeType": FOLDER, "parents": [j.get("folder") or "root"]}
-    return jsonify(id=drive(acct).files().create(body=body, fields="id").execute()["id"])
+    if not acct:
+        return jsonify(error="No linked account available."), 507
+    name = j["name"] + (".txt" if j["type"] == "text" and "." not in j["name"] else "")
+    body = {"name": name, "mimeType": NEW[j["type"]], "parents": [j.get("folder") or "root"]}
+    r = drive(acct).files().create(body=body, fields="id,webViewLink").execute()
+    log(f"created {j['type']}", acct, name)
+    return jsonify(account=acct, **r)
 
 
 @app.delete("/api/files")
 def trash():
     drive(request.args["account"]).files().update(fileId=request.args["id"], body={"trashed": True}).execute()
+    log("moved to trash", request.args["account"], request.args.get("name", ""))
     return "", 204
+
+
+@app.get("/api/thumb")
+def thumb():  # proxied so the browser doesn't need to be signed in to each Google account
+    acct = request.args["account"]
+    link = THUMBS.get((acct, request.args["id"]))
+    if not link:
+        return "", 404
+    r = AuthorizedSession(creds(acct)).get(re.sub(r"=s\d+$", "=s400", link))
+    return Response(r.content, status=r.status_code, mimetype=r.headers.get("Content-Type", "image/jpeg"),
+                    headers={"Cache-Control": "private, max-age=1800"})
+
+
+@app.route("/api/content", methods=["GET", "PUT"])
+def content():  # in-app editing of plain-text files
+    acct, fid = request.args["account"], request.args["id"]
+    d = drive(acct)
+    meta = d.files().get(fileId=fid, fields="name,mimeType,size").execute()
+    if request.method == "GET":
+        if int(meta.get("size", 0)) > 2_000_000:
+            return jsonify(error="Files over 2 MB can't be edited here."), 413
+        log("opened for editing", acct, meta["name"])
+        return jsonify(text=d.files().get_media(fileId=fid).execute().decode("utf-8", "replace"))
+    media = MediaIoBaseUpload(BytesIO(request.json["text"].encode()), meta["mimeType"])
+    d.files().update(fileId=fid, media_body=media).execute()
+    log("edited", acct, meta["name"])
+    return "", 204
+
+
+@app.post("/api/share")
+def share():
+    j = request.json
+    if j["role"] not in ("reader", "commenter", "writer"):
+        return jsonify(error="Unknown access level."), 400
+    perm = {"type": "user", "role": j["role"], "emailAddress": j["email"]}
+    drive(j["account"]).permissions().create(fileId=j["id"], body=perm, sendNotificationEmail=True).execute()
+    log(f"shared ({j['role']}) with {j['email']}", j["account"], j.get("name", ""))
+    return "", 204
+
+
+@app.get("/api/history")
+def history():
+    rows = HISTORY.read_text().splitlines()[-300:] if HISTORY.exists() else []
+    return jsonify([json.loads(r) for r in reversed(rows)])
 
 
 if __name__ == "__main__":

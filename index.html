@@ -5,100 +5,183 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pooled Drive</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#eef1f4;--ink:#14202b;--mute:#5b6a78;--line:#d5dbe1;--card:#fff;--acc:#2f6fed}
-@media(prefers-color-scheme:dark){:root{--bg:#10161c;--ink:#e7edf3;--mute:#8d9cab;--line:#27313b;--card:#171f27}}
+:root{--bg:#f5f6fa;--ink:#202224;--mute:#606060;--line:#e0e0e0;--card:#fff;--acc:#4880ff;--sz:160px}
+@media(prefers-color-scheme:dark){:root{--bg:#1b2431;--ink:#e7edf3;--mute:#9aa6b5;--line:#37445a;--card:#273142}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Schibsted Grotesk",system-ui,sans-serif}
-main{max-width:980px;margin:0 auto;padding:32px 20px 80px}
-h1{font-size:2.1rem;line-height:1.15;margin:0 0 4px;letter-spacing:-.02em}
-#sub{color:var(--mute);margin:0 0 16px;min-height:1.5em}
-#bar{display:flex;height:22px;border-radius:4px;overflow:hidden;background:var(--line)}
-#bar i{display:block;height:100%;border-right:2px solid var(--bg)}
-#accts{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:2px}
-#accts li{display:flex;align-items:center;gap:10px;padding:6px 0}
-#accts li span{flex:1;overflow:hidden;text-overflow:ellipsis}
-#accts em{color:var(--mute);font-style:normal;font-size:.9rem}
-#accts b,.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;flex:none}
-#accts b{margin:0}
-button,.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 12px;border-radius:6px;cursor:pointer;text-decoration:none;display:inline-block}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Nunito Sans",system-ui,sans-serif}
+#side{position:fixed;inset:0 auto 0 0;width:240px;background:var(--card);border-right:1px solid var(--line);padding:24px 20px;display:flex;flex-direction:column;gap:4px;overflow:auto}
+.logo{font-size:24px;font-weight:800;text-align:center;margin:0 0 22px}
+.cap{color:var(--mute);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-top:1px solid var(--line);padding:16px 0 4px 8px;margin-top:14px}
+.nv,#accts li{position:relative;display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:6px;cursor:pointer;color:var(--ink);font-weight:600;text-decoration:none}
+.nv:hover,#accts li:hover{background:var(--bg)}
+.on,.on:hover{background:var(--acc)!important;color:#fff!important}
+.on::before{content:"";position:absolute;left:-20px;top:0;bottom:0;width:8px;background:var(--acc);border-radius:0 4px 4px 0}
+#accts{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+#accts li{flex-wrap:wrap;gap:8px;padding:9px 14px}
+#accts li span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#accts em{order:3;width:100%;padding-left:18px;font-style:normal;font-size:12px;opacity:.7;margin-top:-6px}
+#accts button{border:0;background:none;color:inherit;padding:0 4px;opacity:.6;font-size:12px}
+#accts b,.dot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}.dot{margin-right:6px}
+#side .btn{margin-top:auto;text-align:center}
+#wrap{margin-left:240px}
+header{position:sticky;top:0;z-index:5;display:flex;gap:12px;align-items:center;padding:14px 32px;background:var(--card);border-bottom:1px solid var(--line)}
+header .sp{flex:1}
+main{padding:28px 32px 80px;max-width:1240px}
+h1{font-size:32px;line-height:1.2;margin:0 0 20px;font-weight:700}h2{margin:0 0 8px}
+.card,.st{background:var(--card);border-radius:14px;box-shadow:6px 6px 54px rgba(0,0,0,.05);padding:22px}
+.card{margin-bottom:24px}.card h3{margin:0 0 14px;font-size:18px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:24px;margin-bottom:24px}
+.st .top{display:flex;justify-content:space-between;align-items:flex-start}
+.st p{margin:0;color:var(--mute);font-weight:600}.st strong{font-size:28px;line-height:1.3;font-weight:800}
+.ic{width:60px;height:60px;border-radius:23px;background:color-mix(in srgb,var(--c) 22%,transparent);display:grid;place-items:center;color:var(--c);flex:none}
+.ic svg{width:26px;height:26px}
+#bar{display:flex;height:16px;border-radius:8px;overflow:hidden;background:var(--bg)}#bar i{display:block;height:100%}
+button,.btn{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 16px;border-radius:8px;cursor:pointer;text-decoration:none;display:inline-block}
 button:hover,.btn:hover{border-color:var(--acc)}
 .primary{background:var(--acc);border-color:var(--acc);color:#fff}
-#accts button,.act button{border:0;background:none;color:var(--mute);padding:2px 6px}
 :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
-.tools{display:flex;gap:8px;flex-wrap:wrap;margin:32px 0 12px;align-items:center}
-.tools input[type=search]{flex:1;min-width:160px;font:inherit;padding:7px 12px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink)}
-#crumbs{color:var(--mute);margin-bottom:8px}
-#crumbs a{color:var(--ink);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
-.tbl{background:var(--card);border:1px solid var(--line);border-radius:8px;overflow-x:auto}
-table{width:100%;border-collapse:collapse;min-width:640px}
-th{text-align:left;font-weight:500;color:var(--mute);padding:10px 14px;border-bottom:1px solid var(--line)}
-td{padding:9px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
-tr:last-child td{border:0}
-td.nm{white-space:normal;word-break:break-word}
-tr.dir{cursor:pointer}tr.dir td.nm{font-weight:700}tr.dir:hover{background:var(--bg)}
-.act{text-align:right}.act a{margin-right:6px;color:var(--acc)}
+input,select,textarea{font:inherit;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+.sr{display:flex;align-items:center;gap:8px;width:min(380px,100%);background:var(--bg);border:1px solid var(--line);border-radius:19px;padding:0 16px;color:var(--mute)}
+.sr input{border:0;background:none;flex:1;padding:9px 0;min-width:0}.sr input:focus-visible{outline:0}.sr:focus-within{border-color:var(--acc)}
+.bar2{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:14px}
+#crumbs{color:var(--mute)}#crumbs a{color:var(--ink);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.view{display:flex;gap:10px;align-items:center;color:var(--mute)}.view input{padding:0}
+#rows{display:grid;gap:14px}
+#rows.grid{grid-template-columns:repeat(auto-fill,minmax(var(--sz),1fr))}
+#rows.list{gap:0;border:1px solid var(--line);border-radius:10px}
+.it{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.dir{cursor:pointer}.dir:hover{border-color:var(--acc)}
+.th{height:var(--sz);background:var(--bg);display:flex;align-items:center;justify-content:center;color:var(--mute);overflow:hidden;font-size:calc(var(--sz)/7)}
+.th img{width:100%;height:100%;object-fit:cover}.dir .th{font-weight:700}
+.nm{padding:8px 10px 0;font-weight:600;word-break:break-word}.dir .nm{font-weight:800}
+.meta{padding:0 10px;color:var(--mute);font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.act{padding:4px 6px 8px;display:flex;flex-wrap:wrap}.act button{border:0;background:none;color:var(--acc);padding:2px 6px}
+.list .it{flex-direction:row;align-items:center;gap:12px;padding:6px 12px;border:0;border-bottom:1px solid var(--line);border-radius:0}
+.list .th{width:44px;height:44px;flex:none;border-radius:6px;font-size:11px}
+.list .nm{flex:1;padding:0}.list .meta{padding:0;flex:none;max-width:230px}.list .act{padding:0;flex:none;flex-wrap:nowrap}
 .empty{color:var(--mute);text-align:center;padding:40px 14px}
-body.drag .tbl{outline:2px dashed var(--acc)}
-#toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:6px;opacity:0;pointer-events:none;transition:.2s}
+body.drag #rows{outline:2px dashed var(--acc);outline-offset:6px}
+dialog{border:0;border-radius:14px;background:var(--card);color:var(--ink);width:min(760px,94vw);padding:24px;box-shadow:6px 6px 54px rgba(0,0,0,.2)}
+dialog::backdrop{background:#0008}dialog label{display:block;margin:10px 0;font-weight:600}
+dialog input,dialog select,dialog textarea{width:100%;background:var(--bg)}
+dialog textarea{min-height:320px;font-family:ui-monospace,Consolas,monospace}dialog form{margin-top:12px;text-align:right}
+.tbl{max-height:55vh;overflow:auto}table{width:100%;border-collapse:collapse}
+th{text-align:left;color:var(--mute);font-weight:600}th,td{padding:8px 10px;border-bottom:1px solid var(--line)}
+#toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;opacity:0;pointer-events:none;transition:.2s;z-index:9}
 #toast.show{opacity:1;transform:translate(-50%,0)}#toast.bad{background:#c0392b;color:#fff}
 @media(prefers-reduced-motion:reduce){#toast{transition:none}}
+@media(max-width:860px){#side{position:static;width:auto;border:0}#wrap{margin-left:0}header,main{padding-left:16px;padding-right:16px}.on::before{display:none}.list .meta{display:none}}
+svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.nv svg,.sr svg,.bell svg,#menu svg{width:20px;height:20px}
+#menu,.bell{border:0;background:none;padding:6px;color:var(--ink);position:relative}
+#bn{position:absolute;top:-2px;right:-2px;min-width:18px;height:18px;border-radius:9px;background:#f93c65;color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;font-style:normal}#bn[hidden]{display:none}
+.me{display:flex;align-items:center;gap:12px;margin-left:8px}.me b{width:44px;height:44px;border-radius:50%;background:var(--acc);color:#fff;display:grid;place-items:center;font-size:18px}
+.me strong{display:block;line-height:1.2}.me small{color:var(--mute)}
+.tr{margin-top:14px;color:var(--mute);font-size:14px}.tr b{font-weight:700}.tr b.g{color:#00b69b}.tr b.r{color:#f93c65}.tr b.g::before{content:"↗ "}.tr b.r::before{content:"↘ "}
+.bd{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;padding:1px 8px;border-radius:4px;font-size:12px;font-weight:700;background:color-mix(in srgb,var(--c) 18%,transparent);color:color-mix(in srgb,var(--c) 75%,var(--ink))}
+body.collapsed #side{display:none}body.collapsed #wrap{margin-left:0}
+@media(max-width:640px){.me div{display:none}}
 </style>
 </head>
 <body>
-<main>
-  <h1 id="headline">Loading…</h1>
-  <p id="sub"></p>
-  <div id="bar"></div>
+<aside id="side">
+  <div class="logo"><span>Pooled</span>Drive</div>
+  <a class="nv on" id="all" data-i="-1"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>All files</a>
+  <div class="cap">Accounts</div>
   <ul id="accts"></ul>
-  <div class="tools">
-    <a class="btn primary" href="/auth/add">Link a Google account</a>
-    <input type="search" id="q" placeholder="Search all accounts">
-    <button id="mk">New folder</button>
+  <div class="cap">History</div>
+  <a class="nv" id="hist"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Activity</a>
+  <a class="btn primary" href="/auth/add">+ Link a Google account</a>
+</aside>
+<div id="wrap">
+  <header>
+    <button id="menu" aria-label="Toggle sidebar"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <label class="sr"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input type="search" id="q" placeholder="Search all accounts"></label>
+    <span class="sp"></span>
     <label class="btn">Upload<input id="file" type="file" multiple hidden></label>
-  </div>
-  <div id="crumbs"></div>
-  <div class="tbl"><table>
-    <thead><tr><th>Name</th><th>Account</th><th>Size</th><th>Modified</th><th></th></tr></thead>
-    <tbody id="rows"></tbody>
-  </table></div>
-</main>
+    <button class="primary" id="mk">+ New</button>
+    <button class="bell" id="bell" aria-label="Alerts"><svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><i id="bn" hidden>0</i></button>
+    <div class="me"><b id="av">P</b><div><strong id="mn">Pooled Drive</strong><small>Admin</small></div></div>
+  </header>
+  <main>
+    <h1>Files</h1>
+    <section class="stats">
+      <div class="st"><div class="top"><div><p>Free space</p><strong id="sFree">–</strong></div><i class="ic" style="--c:#8280ff"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></i></div><div class="tr" id="tFree"></div></div>
+      <div class="st"><div class="top"><div><p>Used</p><strong id="sUsed">–</strong></div><i class="ic" style="--c:#fec53d"><svg viewBox="0 0 24 24"><path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg></i></div><div class="tr" id="tUsed"></div></div>
+      <div class="st"><div class="top"><div><p>Linked accounts</p><strong id="sAcc">–</strong></div><i class="ic" style="--c:#4ad991"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 3-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14c2.8 0 4.5 1.8 4.5 4"/></svg></i></div><div class="tr" id="tAcc"></div></div>
+      <div class="st"><div class="top"><div><p>Items shown</p><strong id="sItems">–</strong></div><i class="ic" style="--c:#ff9066"><svg viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/></svg></i></div><div class="tr" id="tItems"></div></div>
+    </section>
+    <section class="card"><h3>Storage by account</h3><div id="bar"></div></section>
+    <section class="card">
+      <div class="bar2">
+        <div id="crumbs"></div>
+        <div class="view">
+          <select id="vw" aria-label="View"><option value="grid">Icons</option><option value="list">List</option></select>
+          <label>Size <input id="sz" type="range" min="80" max="320" step="10"></label>
+        </div>
+      </div>
+      <div id="rows"></div>
+    </section>
+  </main>
+</div>
+<dialog id="dlg"></dialog>
 <div id="toast" role="status"></div>
 <script>
-const $=s=>document.querySelector(s),COL=['#2f6fed','#e08a1e','#1e9e78','#b23a8c','#6b7a8c','#d04a3a'];
-let accts=[],path=[],query='';
+const $=s=>document.querySelector(s),enc=encodeURIComponent,FOLDER='application/vnd.google-apps.folder',J={'Content-Type':'application/json'};
+const COL=['#2f6fed','#e08a1e','#1e9e78','#b23a8c','#6b7a8c','#d04a3a'];
+let accts=[],path=[],query='',list=[],bad=0;
+let view=localStorage.getItem('view')||'grid',size=+localStorage.getItem('size')||160;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>{if(n==null||n==='')return'';const u=['B','KB','MB','GB','TB'];let i=0;n=+n;while(n>=1024&&i<4){n/=1024;i++}return n.toFixed(i?1:0)+' '+u[i]};
 const color=e=>COL[Math.max(0,accts.findIndex(a=>a.email===e))%COL.length];
+const ext=n=>n.includes('.')?n.split('.').pop().slice(0,4):'file';
+const isText=f=>f.mimeType.startsWith('text/')||/json|xml|javascript/.test(f.mimeType);
+const post=(u,b)=>api(u,{method:'POST',headers:J,body:JSON.stringify(b)});
 async function api(u,o){const r=await fetch(u,o);if(!r.ok){let m;try{m=(await r.json()).error}catch{}throw new Error(m||r.statusText)}return r.status===204?null:r.json()}
 function say(m,bad){const t=$('#toast');t.textContent=m;t.className=bad?'bad show':'show';clearTimeout(say.t);say.t=setTimeout(()=>t.className='',4000)}
+const dlg=$('#dlg');
+function modal(h){dlg.innerHTML=h+'<form method="dialog"><button>Close</button></form>';dlg.showModal()}
+function applyView(){$('#rows').className=view;$('#vw').value=view;$('#sz').value=size;$('#sz').disabled=view==='list';document.documentElement.style.setProperty('--sz',size+'px');localStorage.setItem('view',view);localStorage.setItem('size',size)}
 
 async function loadAccounts(){
   accts=await api('/api/accounts');
   const ok=accts.filter(a=>!a.error),unl=ok.some(a=>a.limit==null);
   const used=ok.reduce((s,a)=>s+a.used,0),lim=ok.reduce((s,a)=>s+(a.limit||0),0),den=unl?used||1:lim||1;
-  $('#headline').textContent=!accts.length?'Link your first Google account':unl?`${fmt(used)} used across ${accts.length} accounts`:`${fmt(lim-used)} free across ${accts.length} account${accts.length>1?'s':''}`;
-  $('#sub').textContent=accts.length&&!unl?`${fmt(used)} of ${fmt(lim)} used`:(accts.length?'':'Each account you add joins one shared pool.');
+  [['sFree',unl?'Unlimited':fmt(lim-used)],['sUsed',fmt(used)],['sAcc',accts.length]].forEach(([k,v])=>$('#'+k).textContent=v);
+  bad=accts.length-ok.length;const nm=accts[0]?.email||'';
+  $('#tFree').innerHTML=unl||!lim?'<b class="g">Unlimited</b> storage':`<b class="g">${Math.round((lim-used)/lim*100)}%</b> of capacity free`;
+  $('#tUsed').innerHTML=lim&&!unl?`<b class="${used/lim>.9?'r':'g'}">${Math.round(used/lim*100)}%</b> of capacity used`:'across all accounts';
+  $('#tAcc').innerHTML=bad?`<b class="r">${bad}</b> need re-linking`:accts.length?'<b class="g">All</b> connected':'none linked yet';
+  $('#bn').textContent=bad;$('#bn').hidden=!bad;$('#mn').textContent=nm?nm.split('@')[0]:'Pooled Drive';$('#av').textContent=(nm||'P')[0].toUpperCase();
   $('#bar').innerHTML=ok.map(a=>`<i style="width:${a.used/den*100}%;background:${color(a.email)}" title="${esc(a.email)}"></i>`).join('');
-  $('#accts').innerHTML=accts.map(a=>`<li><b style="background:${color(a.email)}"></b><span>${esc(a.email)}</span><em>${a.error?'needs re-linking':fmt(a.used)+(a.limit?' of '+fmt(a.limit):'')}</em><button data-rm="${esc(a.email)}">Unlink</button></li>`).join('');
+  $('#accts').innerHTML=accts.map(a=>`<li data-go="${esc(a.email)}"><b style="background:${color(a.email)}"></b><span>${esc(a.email)}</span><em>${a.error?'needs re-linking':fmt(a.used)+(a.limit?' of '+fmt(a.limit):'')}</em><button data-rm="${esc(a.email)}">Unlink</button></li>`).join('');
+}
+
+function card(f,i){
+  const d=f.mimeType===FOLDER;
+  const th=f.thumb?`<img loading="lazy" alt="" src="/api/thumb?account=${enc(f.account)}&id=${f.id}">`:esc(f.isAcct?'Account':d?'Folder':ext(f.name));
+  const b=(a,t)=>`<button data-a="${a}">${t}</button>`;
+  const info=f.isAcct?'Linked account':`<span class="bd" style="--c:${color(f.account)}">${esc(f.account)}</span>`;
+  return`<div class="it${d?' dir':''}" data-x="${i}"><div class="th">${th}</div><div class="nm">${esc(f.name)}</div><div class="meta">${info}</div>`+
+    (f.isAcct?'':`<div class="meta">${d?'':fmt(f.size)+'  '}${(f.modifiedTime||'').slice(0,10)}</div><div class="act">${d?'':b('edit','Edit')}${b('share','Share')}${d?'':b('dl','Download')}${b('del','Delete')}</div>`)+'</div>';
 }
 
 async function loadFiles(){
   const cur=path[path.length-1],p=new URLSearchParams();
-  if(query)p.set('q',query);else if(cur){p.set('account',cur.acct);p.set('folder',cur.id)}
-  const rows=accts.length?await api('/api/files?'+p):[];
+  if(query)p.set('q',query);else if(cur){p.set('account',cur.acct);p.set('folder',cur.id);p.set('name',cur.name)}
+  list=accts.length?await api('/api/files?'+p):[];
+  if(!query&&!cur)list=[...accts.map(a=>({id:'root',name:a.email,mimeType:FOLDER,account:a.email,isAcct:1})),...list];
   $('#crumbs').innerHTML=query?`Results for “${esc(query)}” <button id="clr">Clear search</button>`:['<a data-i="-1">All accounts</a>',...path.map((x,i)=>`<a data-i="${i}">${esc(x.name)}</a>`)].join(' / ');
-  $('#rows').innerHTML=rows.length?rows.map(f=>{
-    const d=f.mimeType==='application/vnd.google-apps.folder';
-    return`<tr${d?` class="dir" data-open="${f.id}" data-acct="${esc(f.account)}" data-name="${esc(f.name)}"`:''}><td class="nm">${esc(f.name)}${d?'/':''}</td><td><span class="dot" style="background:${color(f.account)}"></span>${esc(f.account)}</td><td>${d?'':fmt(f.size)}</td><td>${f.modifiedTime.slice(0,10)}</td><td class="act">${d?'':`<a href="/api/download?account=${encodeURIComponent(f.account)}&id=${f.id}">Download</a>`}<button data-del="${f.id}" data-acct="${esc(f.account)}">Delete</button></td></tr>`}).join('')
-    :`<tr><td colspan="5" class="empty">${accts.length?'Nothing here. Drop files anywhere on this page to upload.':'Link a Google account to see your files.'}</td></tr>`;
+  $('#sItems').textContent=list.filter(f=>!f.isAcct).length;$('#tItems').textContent=query?'matching your search':cur?'in '+cur.name:'across all accounts';document.querySelectorAll('#accts li').forEach(l=>l.classList.toggle('on',path[0]?.acct===l.dataset.go));$('#all').classList.toggle('on',!path.length);
+  $('#rows').innerHTML=list.length?list.map(card).join(''):`<div class="empty">${accts.length?'Nothing here. Drop files anywhere on this page to upload.':'Link a Google account to see your files.'}</div>`;
 }
 const refresh=async()=>{try{await loadAccounts();await loadFiles()}catch(e){say(e.message,1)}};
 
-async function up(list){
+async function up(files){
   const cur=path[path.length-1];
-  for(const f of list){
+  for(const f of files){
     say(`Uploading ${f.name}…`);
     const fd=new FormData();fd.append('file',f);
     if(cur){fd.append('account',cur.acct);fd.append('folder',cur.id)}
@@ -108,24 +191,57 @@ async function up(list){
   refresh();
 }
 
+function newDlg(){
+  const cur=path[path.length-1];
+  modal(`<h2>New</h2><label>Type<select id="nt"><option value="doc">Google Doc</option><option value="sheet">Google Sheet</option><option value="slide">Google Slides</option><option value="text">Text file</option><option value="folder">Folder</option></select></label><label>Name<input id="nn"></label>${cur?'':`<label>Account<select id="na"><option value="">Most free space</option>${accts.map(a=>`<option>${esc(a.email)}</option>`).join('')}</select></label>`}<button class="primary" id="go">Create</button>`);
+  $('#go').onclick=async()=>{
+    const name=$('#nn').value.trim();if(!name)return;
+    try{const r=await post('/api/new',{type:$('#nt').value,name,account:cur?cur.acct:$('#na').value,folder:cur?.id});dlg.close();say(`Created in ${r.account}`);refresh()}catch(e){say(e.message,1)}
+  };
+}
+function shareDlg(f){
+  modal(`<h2>Share ${esc(f.name)}</h2><label>Email<input id="se" type="email"></label><label>Access<select id="sr"><option value="reader">Can view</option><option value="commenter">Can comment</option><option value="writer">Can edit</option></select></label><button class="primary" id="go">Share</button>`);
+  $('#go').onclick=async()=>{
+    try{await post('/api/share',{account:f.account,id:f.id,name:f.name,email:$('#se').value.trim(),role:$('#sr').value});dlg.close();say('Shared')}catch(e){say(e.message,1)}
+  };
+}
+async function editDlg(f){
+  if(!isText(f)){const l=f.webViewLink;open(l+(l.includes('?')?'&':'?')+'authuser='+enc(f.account),'_blank');return}
+  try{
+    const r=await api(`/api/content?account=${enc(f.account)}&id=${f.id}`);
+    modal(`<h2>${esc(f.name)}</h2><textarea id="tx"></textarea><button class="primary" id="go">Save</button>`);
+    $('#tx').value=r.text;
+    $('#go').onclick=async()=>{try{await api(`/api/content?account=${enc(f.account)}&id=${f.id}`,{method:'PUT',headers:J,body:JSON.stringify({text:$('#tx').value})});dlg.close();say('Saved')}catch(e){say(e.message,1)}};
+  }catch(e){say(e.message,1)}
+}
+async function histDlg(){
+  const h=await api('/api/history');
+  modal(`<h2>Activity</h2><div class="tbl"><table><tr><th>When</th><th>Action</th><th>Account</th><th>Item</th></tr>${h.map(r=>`<tr><td>${r.t}</td><td>${esc(r.action)}</td><td>${esc(r.account)}</td><td>${esc(r.name)}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">Nothing recorded yet.</td></tr>'}</table></div>`);
+}
+
 document.addEventListener('click',async e=>{
-  const t=e.target,row=t.closest('tr.dir');
-  if(t.dataset.rm){if(confirm(`Unlink ${t.dataset.rm}? Its files stay in Google Drive.`)){await api('/api/accounts/'+encodeURIComponent(t.dataset.rm),{method:'DELETE'});path=[];refresh()}}
-  else if(t.dataset.del){if(confirm('Move this file to the trash in its Drive account?')){await api(`/api/files?account=${encodeURIComponent(t.dataset.acct)}&id=${t.dataset.del}`,{method:'DELETE'}).catch(e=>say(e.message,1));refresh()}}
+  const t=e.target,it=t.closest('.it'),f=it&&list[+it.dataset.x],a=t.dataset.a;
+  if(t.dataset.rm){if(confirm(`Unlink ${t.dataset.rm}? Its files stay in Google Drive.`)){await api('/api/accounts/'+enc(t.dataset.rm),{method:'DELETE'});path=[];refresh()}}
+  else if(t.closest('[data-go]')){const g=t.closest('[data-go]').dataset.go;path=[{id:'root',acct:g,name:g}];query='';$('#q').value='';loadFiles()}
+  else if(a==='edit')editDlg(f);
+  else if(a==='share')shareDlg(f);
+  else if(a==='dl')location.href=`/api/download?account=${enc(f.account)}&id=${f.id}`;
+  else if(a==='del'){if(confirm(`Move “${f.name}” to the trash in its Drive account?`)){await api(`/api/files?account=${enc(f.account)}&id=${f.id}&name=${enc(f.name)}`,{method:'DELETE'}).catch(e=>say(e.message,1));refresh()}}
   else if(t.dataset.i!==undefined&&t.tagName==='A'){path=path.slice(0,+t.dataset.i+1);loadFiles()}
   else if(t.id==='clr'){query='';$('#q').value='';loadFiles()}
-  else if(row){path.push({id:row.dataset.open,acct:row.dataset.acct,name:row.dataset.name});query='';$('#q').value='';loadFiles()}
+  else if(it&&it.classList.contains('dir')){path.push({id:f.id,acct:f.account,name:f.name});query='';$('#q').value='';loadFiles()}
 });
 $('#q').addEventListener('input',()=>{clearTimeout($('#q').t);$('#q').t=setTimeout(()=>{query=$('#q').value.trim();loadFiles().catch(e=>say(e.message,1))},350)});
 $('#file').addEventListener('change',e=>{up([...e.target.files]);e.target.value=''});
-$('#mk').addEventListener('click',async()=>{
-  const name=prompt('Folder name');if(!name)return;const cur=path[path.length-1];
-  try{await api('/api/folder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,account:cur?.acct,folder:cur?.id})});loadFiles()}catch(e){say(e.message,1)}
-});
+$('#mk').onclick=newDlg;$('#hist').onclick=histDlg;
+$('#vw').onchange=e=>{view=e.target.value;applyView()};
+$('#sz').oninput=e=>{size=+e.target.value;applyView()};
 ['dragenter','dragover'].forEach(n=>addEventListener(n,e=>{e.preventDefault();document.body.classList.add('drag')}));
 ['dragleave','drop'].forEach(n=>addEventListener(n,e=>{e.preventDefault();document.body.classList.remove('drag')}));
 addEventListener('drop',e=>{if(e.dataTransfer.files.length)up([...e.dataTransfer.files])});
-refresh();
+$('#menu').onclick=()=>document.body.classList.toggle('collapsed');
+$('#bell').onclick=()=>bad?say(`${bad} account${bad>1?'s':''} need re-linking. Use “Link a Google account”.`,1):histDlg();
+applyView();refresh();
 </script>
 </body>
 </html>

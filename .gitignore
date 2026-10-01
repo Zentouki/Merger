@@ -13,3 +13,6 @@ venv/
 Thumbs.db
 .vscode/
 .idea/
+
+# Activity log (contains file names)
+history.jsonl
