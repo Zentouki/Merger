@@ -20,3 +20,4 @@ history.jsonl
 # Login data
 auth.json
 secret.key
+token.key 
