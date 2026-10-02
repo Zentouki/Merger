@@ -1,13 +1,15 @@
 """Merger: link several Google Drive accounts and use them as one storage.
 Run locally: python app.py  ->  http://localhost:5000
 """
-import json, os, re, secrets, time
+import json, os, re, secrets, tempfile, threading, time
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import quote
 
 from flask import (Flask, Response, jsonify, redirect, request, send_from_directory,
                    session, stream_with_context)
+from cryptography.fernet import Fernet
 from werkzeug.security import check_password_hash, generate_password_hash
 from google.auth.transport.requests import AuthorizedSession, Request
 from google.oauth2.credentials import Credentials
@@ -40,34 +42,79 @@ app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
 
 
 # ---------- account + credential helpers ----------
+_FER = []
+
+
+def fernet():
+    if not _FER:
+        try:  # key lives in the OS keychain when one is available
+            import keyring
+            k = keyring.get_password("merger", "tokens")
+            if not k:
+                k = Fernet.generate_key().decode()
+                keyring.set_password("merger", "tokens", k)
+        except Exception:  # otherwise fall back to a key file (weaker: it sits next to the data)
+            kf = BASE / "token.key"
+            if not kf.exists():
+                kf.write_text(Fernet.generate_key().decode())
+            k = kf.read_text()
+        _FER.append(Fernet(k.encode()))
+    return _FER[0]
+
+
 def load():
-    return json.loads(STORE.read_text()) if STORE.exists() else {}
+    if not STORE.exists():
+        return {}
+    raw = STORE.read_text().strip()
+    return json.loads(raw) if raw.startswith("{") else json.loads(fernet().decrypt(raw.encode()))
 
 
 def save(d):
-    STORE.write_text(json.dumps(d, indent=2))
+    STORE.write_text(fernet().encrypt(json.dumps(d).encode()).decode())
+
+
+CRED_LOCK = threading.Lock()
 
 
 def creds(email):
-    d = load()
-    c = Credentials.from_authorized_user_info(d[email], SCOPES)
-    if not c.valid:  # expired or missing access token -> refresh and persist
-        c.refresh(Request())
-        d[email] = json.loads(c.to_json())
-        save(d)
-    return c
+    with CRED_LOCK:  # listing runs in parallel; keep token refreshes from racing
+        d = load()
+        c = Credentials.from_authorized_user_info(d[email], SCOPES)
+        if not c.valid:  # expired or missing access token -> refresh and persist
+            c.refresh(Request())
+            d[email] = json.loads(c.to_json())
+            save(d)
+        return c
 
 
 def drive(email):
     return build("drive", "v3", credentials=creds(email), cache_discovery=False)
 
 
-def quota(email):
+def _quota(email):
     try:
         q = drive(email).about().get(fields="storageQuota").execute()["storageQuota"]
         return {"email": email, "used": int(q["usage"]), "limit": int(q["limit"]) if q.get("limit") else None}
     except Exception as e:  # revoked token, network, etc.
         return {"email": email, "error": str(e)}
+
+
+QC = {}  # email -> (timestamp, quota); cleared whenever we change a Drive
+
+
+def quota(email):
+    hit = QC.get(email)
+    if hit and time.time() - hit[0] < 60:
+        return hit[1]
+    q = _quota(email)
+    if "error" not in q:
+        QC[email] = (time.time(), q)
+    return q
+
+
+def quotas():
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        return list(ex.map(quota, load()))
 
 
 def free(q):
@@ -76,7 +123,7 @@ def free(q):
 
 def best(size=0):
     """Account with the most free space that can still fit `size` bytes."""
-    ok = [q for q in map(quota, load()) if "error" not in q and free(q) >= size]
+    ok = [q for q in quotas() if "error" not in q and free(q) >= size]
     return max(ok, key=free)["email"] if ok else None
 
 
@@ -162,7 +209,7 @@ def index():
 
 @app.get("/api/accounts")
 def accounts():
-    return jsonify([quota(e) for e in load()])
+    return jsonify(quotas())
 
 
 @app.delete("/api/accounts/<email>")
@@ -170,7 +217,32 @@ def unlink(email):
     d = load()
     d.pop(email, None)
     save(d)
+    QC.clear()
     return "", 204
+
+
+def get_entity_icon(mime_type: str, file_name: str) -> str:
+    """Pick an emoji for a file from its MIME type or extension."""
+    if mime_type == FOLDER:
+        return "📁"
+    mime, name = mime_type.lower(), file_name.lower()
+    if "pdf" in mime or name.endswith(".pdf"):
+        return "📕"
+    # Spreadsheets and presentations are tested before documents: Office MIME types such as
+    # "...officedocument.spreadsheetml.sheet" also contain the word "document".
+    if any(k in mime for k in ("spreadsheet", "excel", "csv")) or name.endswith((".xlsx", ".xls", ".csv")):
+        return "📊"
+    if any(k in mime for k in ("presentation", "powerpoint", "slide")) or name.endswith((".pptx", ".ppt")):
+        return "📙"
+    if any(k in mime for k in ("document", "word")) or name.endswith((".docx", ".doc", ".md", ".rtf")):
+        return "📘"
+    if any(k in mime for k in ("image/", "png", "jpeg", "jpg", "gif")):
+        return "🖼️"
+    if any(k in mime for k in ("audio/", "video/", "mp4", "mp3", "wav")):
+        return "🎬"
+    if any(k in mime for k in ("zip", "compressed", "x-tar", "gzip")) or name.endswith((".zip", ".rar", ".7z", ".tar.gz")):
+        return "📦"
+    return "📄"
 
 
 @app.get("/api/files")
@@ -182,22 +254,35 @@ def files():
         cond = f"trashed=false and name contains '{safe}'"
     else:
         cond = f"trashed=false and '{folder}' in parents"
-    if acct and not q:
+    if request.args.get("trash"):
+        cond = "trashed=true"
+    if acct and not q and not request.args.get("trash"):
         log("opened folder", acct, request.args.get("name", folder))
-    out = []
-    for email in [acct] if acct else load():  # merge every account into one listing
-        try:
-            res = drive(email).files().list(q=cond, pageSize=200,
-                                            fields="files(id,name,mimeType,size,modifiedTime,thumbnailLink,webViewLink)").execute()
+    def fetch(email):
+        items, tok = [], None
+        while True:  # follow every page, not just the first 200
+            res = drive(email).files().list(
+                q=cond, pageSize=1000, pageToken=tok,
+                fields="nextPageToken,files(id,name,mimeType,size,modifiedTime,thumbnailLink,webViewLink)").execute()
             for f in res["files"]:
                 if f.get("thumbnailLink"):
                     THUMBS[(email, f["id"])] = f.pop("thumbnailLink")
                     f["thumb"] = True
-                out.append({**f, "account": email})
-        except Exception:
-            pass  # a broken account shows up as "needs re-link" in /api/accounts
+                items.append({**f, "account": email, "icon": get_entity_icon(f["mimeType"], f["name"])})
+            tok = res.get("nextPageToken")
+            if not tok:
+                return items
+
+    out, errors = [], []
+    emails = [acct] if acct else list(load())
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for email, fut in [(e, ex.submit(fetch, e)) for e in emails]:
+            try:
+                out += fut.result()
+            except Exception:
+                errors.append(email)  # the page tells the user which account to re-link
     out.sort(key=lambda f: (f["mimeType"] != FOLDER, f["name"].lower()))
-    return jsonify(out)
+    return jsonify(files=out, errors=errors)
 
 
 @app.post("/api/upload")
@@ -213,6 +298,7 @@ def upload():
                               chunksize=8 * 1024 * 1024, resumable=True)
     body = {"name": f.filename, "parents": [request.form.get("folder") or "root"]}
     r = drive(acct).files().create(body=body, media_body=media, fields="id").execute()
+    QC.clear()
     log("uploaded", acct, f.filename)
     return jsonify(account=acct, id=r["id"])
 
@@ -246,6 +332,7 @@ def new():
     name = j["name"] + (".txt" if j["type"] == "text" and "." not in j["name"] else "")
     body = {"name": name, "mimeType": NEW[j["type"]], "parents": [j.get("folder") or "root"]}
     r = drive(acct).files().create(body=body, fields="id,webViewLink").execute()
+    QC.clear()
     log(f"created {j['type']}", acct, name)
     return jsonify(account=acct, **r)
 
@@ -253,6 +340,7 @@ def new():
 @app.delete("/api/files")
 def trash():
     drive(request.args["account"]).files().update(fileId=request.args["id"], body={"trashed": True}).execute()
+    QC.clear()
     log("moved to trash", request.args["account"], request.args.get("name", ""))
     return "", 204
 
@@ -280,6 +368,7 @@ def content():  # in-app editing of plain-text files
         return jsonify(text=d.files().get_media(fileId=fid).execute().decode("utf-8", "replace"))
     media = MediaIoBaseUpload(BytesIO(request.json["text"].encode()), meta["mimeType"])
     d.files().update(fileId=fid, media_body=media).execute()
+    QC.clear()
     log("edited", acct, meta["name"])
     return "", 204
 
@@ -301,5 +390,105 @@ def history():
     return jsonify([json.loads(r) for r in reversed(rows)])
 
 
+@app.post("/api/restore")
+def restore():
+    j = request.json
+    drive(j["account"]).files().update(fileId=j["id"], body={"trashed": False}).execute()
+    QC.clear()
+    log("restored from trash", j["account"], j.get("name", ""))
+    return "", 204
+
+
+@app.delete("/api/purge")
+def purge():
+    acct = request.args["account"]
+    drive(acct).files().delete(fileId=request.args["id"]).execute()
+    QC.clear()
+    log("deleted forever", acct, request.args.get("name", ""))
+    return "", 204
+
+
+@app.post("/api/emptytrash")
+def emptytrash():
+    failed = []
+    for email in load():
+        try:
+            drive(email).files().emptyTrash().execute()
+        except Exception:
+            failed.append(email)
+    QC.clear()
+    log("emptied trash", "all accounts")
+    return jsonify(failed=failed)
+
+
+EXPORT = {
+    "application/vnd.google-apps.document": ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx"),
+    "application/vnd.google-apps.spreadsheet": ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx"),
+    "application/vnd.google-apps.presentation": ("application/vnd.openxmlformats-officedocument.presentationml.presentation", ".pptx"),
+}
+
+
+@app.post("/api/move")
+def move():
+    j = request.json
+    src, fid, dst = j["account"], j["id"], j["to_account"]
+    folder = j.get("to_folder") or None
+    d = drive(src)
+    meta = d.files().get(fileId=fid, fields="name,mimeType,size,parents").execute()
+    if src == dst:  # same Drive: just change the parent, nothing is copied
+        if not folder:
+            folder = d.files().get(fileId="root", fields="id").execute()["id"]
+        d.files().update(fileId=fid, addParents=folder, removeParents=",".join(meta.get("parents", [])),
+                         fields="id").execute()
+    else:
+        mime, name = meta["mimeType"], meta["name"]
+        if mime == FOLDER:
+            return jsonify(error="Folders can only be moved within the same account."), 400
+        base = f"https://www.googleapis.com/drive/v3/files/{fid}"
+        if mime in EXPORT:  # Docs/Sheets/Slides can't be copied as-is: convert to Office files
+            mime, ext = EXPORT[mime]
+            url, name = f"{base}/export?mimeType={quote(mime)}", name + ext
+        elif mime.startswith("application/vnd.google-apps"):
+            return jsonify(error="This Google file type can't be copied to another account."), 400
+        else:
+            url = base + "?alt=media"
+        q = quota(dst)
+        if "error" in q or free(q) < int(meta.get("size", 0)):
+            return jsonify(error="The destination account doesn't have enough free space."), 507
+        r = AuthorizedSession(creds(src)).get(url, stream=True)
+        if r.status_code != 200:
+            return jsonify(error="Couldn't read the original file."), 502
+        with tempfile.TemporaryFile() as tmp:  # spool to disk so big files don't fill memory
+            for chunk in r.iter_content(1 << 20):
+                tmp.write(chunk)
+            tmp.seek(0)
+            media = MediaIoBaseUpload(tmp, mime, chunksize=8 * 1024 * 1024, resumable=True)
+            drive(dst).files().create(body={"name": name, "parents": [folder or "root"]},
+                                      media_body=media, fields="id").execute()
+        d.files().update(fileId=fid, body={"trashed": True}).execute()  # original goes to Trash only after the copy worked
+    QC.clear()
+    log(f"moved to {dst}", src, j.get("name", ""))
+    return "", 204
+
+
+@app.get("/api/nodes")
+def nodes():  # instant: account names only, no Google calls
+    return jsonify([{"email": e} for e in load()])
+
+
+@app.get("/api/node")
+def node():  # one account's storage, fetched on its own so a slow account can't hold up the rest
+    email = request.args.get("email", "")
+    if email not in load():
+        return jsonify(error="Unknown account."), 404
+    return jsonify(quota(email))
+
+
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000)  # localhost only: this app has no login of its own
+    if STORE.exists():
+        save(load())  # encrypts a plain-text accounts.json left by an older version
+    try:
+        from waitress import serve  # sturdier than Flask's development server
+        serve(app, host="127.0.0.1", port=5000, threads=8, max_request_body_size=5 * 1024 ** 3)
+    except ImportError:
+        app.run(host="127.0.0.1", port=5000)  # localhost only

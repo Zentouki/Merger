@@ -35,3 +35,7 @@ Open http://localhost:5000 and click **Link a Google account** once per account.
 The first time you open Merger it asks you to create an email and password. After that you sign in with them. Your sign-ins and failed attempts appear in **Activity**.
 
 Forgot the password? Stop the app, delete `auth.json`, and start it again to set a new one. `auth.json` and `secret.key` are created next to `app.py`; keep them private.
+
+## Credits
+
+The interface style is based on free Freepik templates ("Ultimate Web UI Elements" and "Dashboard template user panel"). Designed by Freepik: http://www.freepik.com
