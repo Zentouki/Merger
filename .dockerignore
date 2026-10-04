@@ -1,0 +1,16 @@
+# never bake secrets or personal data into the image
+client_secret.json
+accounts.json
+auth.json
+history.jsonl
+secret.key
+token.key
+data/
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.md
+*.png
+*.ico
+*.svg

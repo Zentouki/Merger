@@ -1,4 +1,8 @@
 flask>=3.0
 google-api-python-client>=2.120
 google-auth-oauthlib>=1.2
+google-auth-httplib2>=0.2.0
 requests>=2.31
+cryptography>=41.0.0
+werkzeug>=3.0
+waitress>=2.1.0
