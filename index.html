@@ -152,6 +152,7 @@ tr.vw,.ic.vw{cursor:pointer}
 @media(max-width:700px){.vh{gap:8px;padding:0 10px}.vt small{display:none}.tm{display:none}#vol{display:none}.eb .pv{display:none}}
 .qc{height:32px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink2);font-weight:500;font-size:13px;white-space:nowrap;transition:background .2s,color .2s,border-color .2s,transform .1s}
 .qc:hover{background:var(--hover)}.qc:active{transform:scale(.96)}.qc[aria-pressed=true]{background:var(--soft);color:var(--link);border-color:color-mix(in srgb,var(--brand) 40%,var(--line))}
+.quiet>tr,.quiet>.ic{animation:none!important}
 .more{padding:18px;text-align:center}.more small{color:var(--mut);margin-left:4px}
 .ic{content-visibility:auto;contain-intrinsic-size:auto calc(var(--sz) + 96px)}
 @keyframes rise{from{opacity:0;transform:translateY(8px)}}@keyframes grow{from{transform:scaleX(0)}}@keyframes sh{to{background-position:-200% 0}}
@@ -264,7 +265,7 @@ mq.addEventListener('change',()=>theme==='system'&&applyLook(true));
 $('#pal').innerHTML=Object.entries(PAL).map(([k,c])=>`<button data-p="${k}" style="--c:${c}" title="${k[0].toUpperCase()+k.slice(1)}" aria-label="${k} palette"></button>`).join('');
 function applyView(){
   $$('#viewSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===view));$$('#scale button').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.s===scale));
-  $('#scale').hidden=view==='table';document.documentElement.style.setProperty('--sz',150*scale+'px');ls.set('view',view);ls.set('scale',scale);
+  $('#scale').hidden=view==='table';thumbPx=Math.min(800,Math.max(100,Math.ceil(150*scale*(devicePixelRatio||1)/50)*50));document.documentElement.style.setProperty('--sz',150*scale+'px');ls.set('view',view);ls.set('scale',scale);
 }
 const rz=$('#rz');
 function setSW(x){sw=Math.max(240,Math.min(520,Math.round(x)));document.documentElement.style.setProperty('--sw',sw+'px');ls.set('sw',sw);rz.setAttribute('aria-valuenow',sw)}
@@ -309,7 +310,7 @@ async function loadAccounts(){
   const prev=Object.fromEntries(accts.map(a=>[a.email,a]));
   accts=((await api('/api/nodes'))||[]).map(n=>prev[n.email]||{email:n.email,loading:true});drawNodes();
   accts.forEach(async a=>{let r;try{r=await api('/api/node?email='+enc(a.email))}catch(e){r={email:a.email,error:e.message}}
-    const k=accts.findIndex(x=>x.email===a.email);if(k>=0&&r){r.photo=r.photo||prev[a.email]?.photo;r.name=r.name||prev[a.email]?.name;accts[k]=r;drawNodes();if(mode==='files')render()}});
+    const k=accts.findIndex(x=>x.email===a.email);if(k>=0&&r){r.photo=r.photo||prev[a.email]?.photo;r.name=r.name||prev[a.email]?.name;accts[k]=r;drawNodes();if(mode==='files')queueRender()}});
 }
 
 /* ---- files ---- */
@@ -322,14 +323,14 @@ const isDir=f=>f.mimeType===FOLDER&&mode==='files';
 const icon=f=>f.icon||(f.mimeType===FOLDER?'📁':'📄');
 const row=(f,i)=>{const d=f.mimeType===FOLDER,[b,x]=split(f.name),a=acct(f.account)||{email:f.account};
   return`<tr class="${isDir(f)?'dir':kind(f)&&mode==='files'?'vw':''}" data-x="${i}" style="--i:${Math.min(i,12)}"><td class="nm"><div class="fn"><span class="fi">${icon(f)}</span><div class="ft"><span class="fname" title="${esc(f.name)}">${d?esc(f.name):esc(b)+'<em>'+esc(x)+'</em>'}</span><small>${ago(f.modifiedTime)}</small></div></div></td><td><span class="host">${avatar(a,'xs')}<code>${esc(f.account)}</code></span></td><td class="sz"><code>${d?'—':mb(f.size)}</code></td><td class="act">${actions(f)}</td></tr>`};
-const card=(f,i)=>`<div class="ic${isDir(f)?' dir':kind(f)&&mode==='files'?' vw':''}" data-x="${i}" style="--i:${Math.min(i,12)}"><div class="th">${f.thumb?`<img loading="lazy" decoding="async" alt="" src="/api/thumb?account=${enc(f.account)}&id=${enc(f.id)}">`:`<span>${icon(f)}</span>`}</div><div class="n" title="${esc(f.name)}">${esc(f.name)}</div><div class="m">${f.mimeType===FOLDER?'Folder':mb(f.size)} · ${ago(f.modifiedTime)}</div><div class="act">${actions(f)}</div></div>`;
+const card=(f,i)=>`<div class="ic${isDir(f)?' dir':kind(f)&&mode==='files'?' vw':''}" data-x="${i}" style="--i:${Math.min(i,12)}"><div class="th">${f.thumb?`<img loading="lazy" decoding="async" alt="" src="/api/thumb?account=${enc(f.account)}&id=${enc(f.id)}&s=${thumbPx}">`:`<span>${icon(f)}</span>`}</div><div class="n" title="${esc(f.name)}">${esc(f.name)}</div><div class="m">${f.mimeType===FOLDER?'Folder':mb(f.size)} · ${ago(f.modifiedTime)}</div><div class="act">${actions(f)}</div></div>`;
 const MEDIA=/^(image|video|audio)\//,DOCS=/pdf|document|spreadsheet|presentation|msword|officedocument|opendocument/;
 const pass=f=>ftype==='all'||(ftype==='folders'?f.mimeType===FOLDER:ftype==='text'?isText(f):ftype==='media'?MEDIA.test(f.mimeType):DOCS.test(f.mimeType));
 function showTab(t){
   $('#pExp').hidden=t!=='explorer';$('#pAudit').hidden=t!=='audit';$('#tExp').classList.toggle('on',t==='explorer');$('#tAud').classList.toggle('on',t==='audit');$('#nHist').classList.toggle('on',t==='audit');
   if(t==='audit'){$('#nAll').classList.remove('on');$('#nTrash').classList.remove('on')}
 }
-let limit=200,seq=0;  // only the first rows are drawn; the rest on request
+let limit=200,seq=0,thumbPx=300,rq=0;  // only the first rows are drawn; the rest on request
 async function loadFiles(){
   showTab('explorer');const my=++seq;limit=200;
   const cur=path[path.length-1],p=new URLSearchParams();
@@ -341,7 +342,9 @@ async function loadFiles(){
   $$('#nodes li[data-go]').forEach(l=>l.classList.toggle('on',mode==='files'&&path[0]?.acct===l.dataset.go));
   render();
 }
-function render(){
+function queueRender(){if(rq)return;rq=requestAnimationFrame(()=>{rq=0;render(true)})}  // several accounts answering at once = one redraw, without replaying the entrance animation
+function render(quiet){
+  $('#rows').classList.toggle('quiet',!!quiet);$('#grid').classList.toggle('quiet',!!quiet);
   const cur=path[path.length-1],sep='<span class="sepc">/</span>';
   $('#crumbs').innerHTML=mode==='trash'?'Trash <button class="btn" id="et">Empty trash</button>':query?`Results for “${esc(query)}”${inContent?' (names and contents)':''} <button class="btn" id="clr">Clear</button>`:
     ['<a data-i="-1">All accounts</a>',...(path.length&&path[0].id!=='root'?[`<span class="hc">${avatar(acct(path[0].acct)||{email:path[0].acct},'xs')}<code>${esc(path[0].acct)}</code></span>`]:[]),...path.map((x,i)=>`<a data-i="${i}">${esc(x.name)}</a>`)].join(sep);
@@ -529,7 +532,7 @@ document.addEventListener('click',async e=>{
   if(t.closest('[data-close]'))return closePanel();
   const tb=t.closest('#themeSeg button'),pb=t.closest('#pal button'),vb=t.closest('#viewSeg button'),sb=t.closest('#scale button');
   if(tb){theme=tb.dataset.t;return applyLook(true)}if(pb){palette=pb.dataset.p;return applyLook(true)}
-  if(vb){view=vb.dataset.v;applyView();return render()}if(sb){scale=+sb.dataset.s;return applyView()}
+  if(vb){view=vb.dataset.v;applyView();return render()}if(sb){scale=+sb.dataset.s;applyView();return render()}
   try{
     if(t.dataset.rm){if(confirm(`Unlink ${t.dataset.rm}? Its files stay in Google Drive.`)){await api('/api/accounts/'+enc(t.dataset.rm),{method:'DELETE'});path=[];refresh()}}
     else if(t.closest('[data-go]')&&!t.closest('a')){const g=t.closest('[data-go]').dataset.go;mode='files';path=[{id:'root',acct:g,name:g}];query='';$('#q').value='';loadFiles()}
@@ -541,7 +544,7 @@ document.addEventListener('click',async e=>{
       else if(a==='purge'){if(confirm(`Permanently delete “${f.name}”? This can't be undone.`)){await api(`/api/purge?${q(f)}`,{method:'DELETE'});say('Deleted forever');refresh()}}}
     else if(t.id==='et'){if(confirm("Permanently delete everything in Trash in every account? This can't be undone.")){const r=await post('/api/emptytrash',{});say(r&&r.failed.length?`Couldn't empty: ${r.failed.join(', ')}`:'Trash emptied',!!(r&&r.failed.length));refresh()}}
     else if(t.dataset.i!==undefined&&t.tagName==='A'){path=path.slice(0,+t.dataset.i+1);loadFiles()}
-    else if(t.id==='moreb'){limit+=300;render()}
+    else if(t.id==='moreb'){limit+=300;render(true)}
     else if(t.id==='clr'){query='';$('#q').value='';loadFiles()}
     else if(rw&&rw.classList.contains('dir')){path.push({id:f.id,acct:f.account,name:f.name});query='';$('#q').value='';loadFiles()}
     else if(rw&&rw.classList.contains('vw'))openViewer(f);

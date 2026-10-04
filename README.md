@@ -74,3 +74,10 @@ Click a file (or choose **Open**) to view it without leaving Merger.
 ## Searching file contents
 
 Turn on **Contents** next to the search box to search inside files as well as their names. Google indexes the text of Docs, Sheets, Slides, PDFs, Office files and plain text, so those are found by what they say. Photos, videos and other files are only found by name. It matches whole words, so a part of a word may not match.
+
+## Speed notes
+
+- The Drive client, credentials and HTTP connections are built once and reused, instead of on every request.
+- The accounts file is decrypted only when it changes. Folder listings are reused for 20 seconds, and any change you make in Merger clears them at once.
+- Pages and file lists are compressed (a 2,000-file folder shrinks about 20 times). Big folders show the first 200 items and load more on request.
+- Thumbnails are requested at the size they are shown, and the activity log reads only its end.

@@ -16,7 +16,6 @@ from requests.adapters import HTTPAdapter
 from werkzeug.security import check_password_hash, generate_password_hash
 from google.auth.transport.requests import AuthorizedSession, Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
@@ -70,6 +69,7 @@ def log(action, acct, name=""):
 
 
 app = Flask(__name__, static_folder=None)  # no /static route: nothing needs it
+app.json.sort_keys = False  # no need to sort every key of big file lists
 KEYFILE = DATA / "secret.key"          # keeps you signed in across restarts
 if not KEYFILE.exists():
     write_private(KEYFILE, secrets.token_hex(32))
@@ -180,7 +180,8 @@ def _quota(email):
         return {"email": email, "error": "unreachable"}
 
 
-QC = {}  # email -> (timestamp, quota); cleared whenever we change a Drive
+QC = {}  # quotas and folder listings with their timestamps; cleared whenever we change a Drive
+LIST_TTL = 20  # seconds a folder listing is reused (going back to a folder is then instant)
 
 
 def quota(email):
@@ -364,6 +365,7 @@ def logout():
 # ---------- OAuth: link another account ----------
 @app.get("/auth/add")
 def auth_add():
+    from google_auth_oauthlib.flow import Flow  # imported here: it is slow to load and only needed when linking
     flow = Flow.from_client_secrets_file(SECRETS, SCOPES, redirect_uri=REDIRECT)
     url, state = flow.authorization_url(access_type="offline", prompt="consent select_account")
     session["state"], session["cv"] = state, flow.code_verifier
@@ -372,6 +374,7 @@ def auth_add():
 
 @app.get("/oauth2callback")
 def callback():
+    from google_auth_oauthlib.flow import Flow
     if request.args.get("error"):  # the user declined on Google's page
         session.pop("state", None)
         return redirect("/")
@@ -455,6 +458,10 @@ def files():
     if acct and not q and not request.args.get("trash"):
         log("opened folder", acct, request.args.get("name", folder))
     def fetch(email):
+        key = ("ls", email, cond)
+        hit = QC.get(key)
+        if hit and time.time() - hit[0] < LIST_TTL:
+            return hit[1]
         items, tok = [], None
         while True:  # follow every page, not just the first 200
             res = drive(email).files().list(
@@ -467,6 +474,10 @@ def files():
                 items.append({**f, "account": email, "icon": get_entity_icon(f["mimeType"], f["name"])})
             tok = res.get("nextPageToken")
             if not tok:
+                if len(QC) > 300:  # keep the cache small
+                    for k in [k for k in QC if isinstance(k, tuple)][:100]:
+                        QC.pop(k, None)
+                QC[key] = (time.time(), items)
                 return items
 
     out, errors = [], []
@@ -594,7 +605,9 @@ def thumb():  # proxied so the browser doesn't need to be signed in to each Goog
     link = THUMBS.get((acct, request.args["id"]))
     if not link:
         return "", 404
-    r = session_for(acct).get(re.sub(r"=s\d+$", "=s400", link))
+    size = request.args.get("s", "")
+    px = min(800, max(64, int(size))) if size.isdigit() else 400  # ask Google for the size we actually show
+    r = session_for(acct).get(re.sub(r"=s\d+$", f"=s{px}", link))
     ctype = r.headers.get("Content-Type", "")
     if r.status_code != 200 or not ctype.startswith("image/"):
         return "", 404
