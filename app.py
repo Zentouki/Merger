@@ -366,6 +366,8 @@ def logout():
 @app.get("/auth/add")
 def auth_add():
     from google_auth_oauthlib.flow import Flow  # imported here: it is slow to load and only needed when linking
+    if not SECRETS.exists():
+        return jsonify(error=f"client_secret.json was not found. Put the file from Google Cloud here: {SECRETS}"), 400
     flow = Flow.from_client_secrets_file(SECRETS, SCOPES, redirect_uri=REDIRECT)
     url, state = flow.authorization_url(access_type="offline", prompt="consent select_account")
     session["state"], session["cv"] = state, flow.code_verifier
@@ -683,6 +685,139 @@ def purge():
     QC.clear()
     log("deleted forever", acct, request.args.get("name", ""))
     return "", 204
+
+
+# ---------- Duplicate finder ----------
+SCANS = OrderedDict()  # scan id -> progress and results; the last three scans are kept
+SCAN_LOCK = threading.Lock()
+MAX_SCAN_FILES = 500_000  # a safety limit on memory
+
+
+def _scan_worker(sc, email):
+    """Read every file the account owns that has a checksum, so identical files can be matched."""
+    try:
+        d, tok = drive(email), None
+        while not sc["cancel"] and sc["seen"] < MAX_SCAN_FILES:
+            res = d.files().list(
+                q="trashed=false and 'me' in owners and mimeType != 'application/vnd.google-apps.folder'",
+                pageSize=1000, pageToken=tok, fields="nextPageToken,files(id,name,size,md5Checksum,createdTime)").execute()
+            files = res.get("files", [])
+            with sc["lock"]:
+                sc["seen"] += len(files)
+                for f in files:  # Google Docs/Sheets/Slides have no checksum and empty files all match, so both are skipped
+                    if f.get("md5Checksum") and int(f.get("size") or 0) > 0:
+                        sc["by"].setdefault((f["md5Checksum"], int(f["size"])), []).append(
+                            (f["id"], f["name"], email, f.get("createdTime") or ""))
+            tok = res.get("nextPageToken")
+            if not tok:
+                break
+    except Exception as e:
+        app.logger.warning("Duplicate scan failed for %s: %s", email, e)
+        with sc["lock"]:
+            sc["failed"].append(email)
+    finally:
+        with sc["lock"]:
+            sc["pending"] -= 1
+
+
+def _finish_scan(sc):
+    groups = []
+    for (md5, size), files in sc["by"].items():
+        if len(files) > 1:
+            files.sort(key=lambda t: t[3])  # oldest first
+            groups.append({"md5": md5, "size": size,
+                           "files": [dict(zip(("id", "name", "account", "created"), t)) for t in files[:50]]})
+    groups.sort(key=lambda g: -g["size"] * (len(g["files"]) - 1))  # biggest saving first
+    sc["truncated"] = len(groups) > 1000
+    sc["groups"], sc["by"] = groups[:1000], None  # free the memory used by the full listing
+    sc["index"] = {(f["account"], f["id"]): (gi, f["name"], g["size"])
+                   for gi, g in enumerate(sc["groups"]) for f in g["files"]}
+    sc["members"] = [len(g["files"]) for g in sc["groups"]]
+
+
+@app.post("/api/dupes/scan")
+def dupes_scan():
+    accounts = list(load())
+    if not accounts:
+        return jsonify(error="Link an account first."), 400
+    with SCAN_LOCK:
+        for s in SCANS.values():
+            if s["pending"] > 0 and not s["cancel"]:
+                return jsonify(id=s["id"])  # a scan is already running: join it
+        sc = {"id": secrets.token_urlsafe(8), "total": len(accounts), "pending": len(accounts), "seen": 0, "by": {},
+              "failed": [], "lock": threading.Lock(), "cancel": False, "groups": None}
+        SCANS[sc["id"]] = sc
+        while len(SCANS) > 3:
+            SCANS.popitem(last=False)
+    for email in accounts:
+        threading.Thread(target=_scan_worker, args=(sc, email), daemon=True).start()
+    log("started duplicate scan", "all accounts")
+    return jsonify(id=sc["id"])
+
+
+@app.get("/api/dupes/status")
+def dupes_status():
+    sc = SCANS.get(request.args.get("id", ""))
+    if not sc:
+        return jsonify(error="That scan is no longer available. Start a new one."), 404
+    with sc["lock"]:
+        if sc["pending"] == 0 and sc["groups"] is None and not sc["cancel"]:
+            _finish_scan(sc)
+        state = "running" if sc["pending"] > 0 else ("stopped" if sc["cancel"] else "done")
+        out = {"state": state, "seen": sc["seen"], "accounts": sc["total"], "pending": sc["pending"],
+               "failed": list(sc["failed"]), "capped": sc["seen"] >= MAX_SCAN_FILES}
+        if state == "done" and request.args.get("groups") == "1":
+            out.update(groups=sc["groups"], truncated=sc["truncated"])
+    return jsonify(out)
+
+
+@app.post("/api/dupes/stop")
+def dupes_stop():
+    sc = SCANS.get(str((request.get_json(silent=True) or {}).get("id", "")))
+    if sc:
+        sc["cancel"] = True
+    return "", 204
+
+
+@app.post("/api/dupes/trash")
+def dupes_trash():
+    """Move chosen copies to Trash. Only files from this scan are accepted, and every set keeps one copy."""
+    j = request.get_json(silent=True) or {}
+    sc, items = SCANS.get(str(j.get("id", ""))), j.get("items")
+    if not sc or sc["groups"] is None or not isinstance(items, list) or not 0 < len(items) <= 500:
+        return jsonify(error="Invalid request."), 400
+    with sc["lock"]:
+        chosen = {}
+        for it in items:
+            key = (str(it.get("account", "")), str(it.get("id", ""))) if isinstance(it, dict) else None
+            if key not in sc["index"]:
+                return jsonify(error="That file is not part of this scan."), 400
+            chosen[key] = sc["index"][key]
+        per = {}
+        for gi, _name, _size in chosen.values():
+            per[gi] = per.get(gi, 0) + 1
+        if any(n >= sc["members"][gi] for gi, n in per.items()):
+            return jsonify(error="Keep at least one copy of every file."), 400
+
+    def one(key):
+        try:
+            drive(key[0]).files().update(fileId=key[1], body={"trashed": True}).execute()
+            return key, True
+        except Exception as e:
+            app.logger.warning("Couldn't trash %s: %s", key, e)
+            return key, False
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        results = list(ex.map(one, list(chosen)))
+    done = [k for k, ok in results if ok]
+    with sc["lock"]:
+        for k in done:
+            sc["members"][sc["index"].pop(k)[0]] -= 1
+    QC.clear()
+    for k in done:
+        log("moved to trash (duplicate)", k[0], chosen[k][1])
+    return jsonify(trashed=len(done), failed=[f"{k[0]}|{k[1]}" for k, ok in results if not ok],
+                   freed=sum(chosen[k][2] for k in done))
 
 
 @app.post("/api/emptytrash")

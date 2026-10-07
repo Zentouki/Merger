@@ -20,4 +20,11 @@ history.jsonl
 # Login data
 auth.json
 secret.key
-token.key 
+token.key
+
+# Desktop build
+.build-venv/
+build/
+dist/
+*.spec
+installer/

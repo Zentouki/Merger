@@ -81,3 +81,23 @@ Turn on **Contents** next to the search box to search inside files as well as th
 - The accounts file is decrypted only when it changes. Folder listings are reused for 20 seconds, and any change you make in Merger clears them at once.
 - Pages and file lists are compressed (a 2,000-file folder shrinks about 20 times). Big folders show the first 200 items and load more on request.
 - Thumbnails are requested at the size they are shown, and the activity log reads only its end.
+
+## Windows launcher
+
+Double-click `Merger.bat`. The first run sets itself up (it needs Python 3.9 or newer and an internet connection), then Merger starts and your browser opens. Keep the window open while you use Merger and close it to stop. Run `Create-Shortcut.bat` once to put a Merger icon on your Desktop that starts it minimised. `Stop-Merger.bat` stops a Merger that is running in the background. Put `client_secret.json` next to `Merger.bat` first.
+
+## Logo
+
+`brand/brand-sheet.png` shows the logo, colours and usage. SVG and PNG files are in `brand/`, and `python brand/make_brand.py` rebuilds them all.
+
+## Duplicate finder
+
+Open **Duplicates** in the sidebar and press **Scan all accounts**. Merger compares the checksum Google stores for each file you own, so it finds identical files inside one account and across accounts. Google Docs, Sheets and Slides have no checksum, and empty files are ignored. Large drives can take a few minutes, and the scan can be stopped. You then choose which copies to move to Trash, or use **Keep oldest** or **Keep newest**. Every set always keeps at least one copy, and Trash can be restored from the Trash view.
+
+## Desktop app (Windows)
+
+Run `Build-Desktop.bat` once. It needs Python 3.9 or newer and an internet connection, and it makes `dist\Merger\Merger.exe`, a program with its own window that you can copy anywhere or pin to the taskbar. To make a setup program as well, install Inno Setup and compile `installer.iss`. Windows 10 and 11 need the Microsoft Edge WebView2 runtime, which most computers already have.
+
+Your accounts, login, history and keys are kept in `%APPDATA%\Merger`, not next to the program, so updating the program never touches them. On the first start Merger asks you to choose your `client_secret.json`. To bring accounts over from the browser version, copy `accounts.json`, `auth.json`, `secret.key`, `token.key` (if you have one) and `history.jsonl` into that folder.
+
+**Linking accounts** opens your normal browser, because Google does not allow sign-in inside an embedded window. Sign in to Merger there, approve access, then come back to the app and it refreshes by itself. Links to Google Drive also open in your browser. If something goes wrong, `%APPDATA%\Merger\merger.log` records what happened. To try the desktop window without building anything, run `pip install pywebview` and then `python desktop.py`.
